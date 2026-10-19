@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Management System</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0F172A;
+            --card-bg: #1E293B;
+            --card-border: #334155;
+            --accent-indigo: #6366F1;
+            --accent-indigo-hover: #4F46E5;
+            --emerald-green: #10B981;
+            --rose-red: #F43F5E;
+            --amber-yellow: #F59E0B;
+            --text-primary: #F8FAFC;
+            --text-muted: #94A3B8;
+            --input-bg: #0F172A;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 30px 20px;
+        }
+
+        .container { max-width: 950px; margin: auto; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            padding: 16px 24px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 20px;
+            color: var(--accent-indigo);
+        }
+
+        .auth-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 36px;
+            max-width: 420px;
+            margin: 60px auto;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .auth-card h2 { margin-top: 0; font-size: 22px; text-align: center; color: var(--text-primary); }
+        .auth-card p { color: var(--text-muted); font-size: 14px; text-align: center; margin-bottom: 20px; }
+
+        .form-group { margin-bottom: 16px; text-align: left; }
+
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 11px 14px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-indigo);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+        }
+
+        .btn {
+            background-color: var(--accent-indigo);
+            color: white;
+            border: none;
+            padding: 11px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background-color: var(--accent-indigo-hover); }
+        .btn-success { background-color: var(--emerald-green); }
+        .btn-danger { background-color: var(--rose-red); width: auto; padding: 6px 14px; font-size: 13px; }
+
+        .project-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 22px;
+            margin-bottom: 20px;
+        }
+
+        .status-green { border-left: 5px solid var(--emerald-green); }
+        .status-red { border-left: 5px solid var(--rose-red); }
+        .status-yellow { border-left: 5px solid var(--amber-yellow); }
+
+        .badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 20px;
+        }
+        .badge-green { background: rgba(16, 185, 129, 0.15); color: var(--emerald-green); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-red { background: rgba(244, 63, 94, 0.15); color: var(--rose-red); border: 1px solid rgba(244, 63, 94, 0.3); }
+        .badge-yellow { background: rgba(245, 158, 11, 0.15); color: var(--amber-yellow); border: 1px solid rgba(245, 158, 11, 0.3); }
+
+        .subtask-box, .comment-box {
+            background: var(--input-bg);
+            border: 1px solid var(--card-border);
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+
+        ul { padding-left: 18px; margin: 8px 0; }
+        li { margin-bottom: 6px; font-size: 14px; }
+
+        .hidden { display: none; }
+        .auth-toggle { text-align: center; margin-top: 15px; font-size: 13px; color: var(--text-muted); }
+        .auth-toggle a { color: var(--accent-indigo); text-decoration: none; font-weight: 600; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+
+        <!-- Login Form -->
+        <div id="loginSection" class="auth-card">
+            <div class="logo" style="margin-bottom: 12px; text-align: center;">Project Management System</div>
+            <h2>Log In</h2>
+            <p>Enter your details to log in</p>
+            <div id="loginError" style="color: var(--rose-red); font-size: 13px; margin-bottom: 10px; text-align: center;"></div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="loginUsername" placeholder="Enter username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPassword" placeholder="Enter password">
+            </div>
+            <button class="btn" onclick="login()">Log In</button>
+            <div class="auth-toggle">
+                Don't have an account? <a onclick="showRegister()">Register Here</a>
+            </div>
+        </div>
+
+        <!-- Register Form -->
+        <div id="registerSection" class="auth-card hidden">
+            <div class="logo" style="margin-bottom: 12px; text-align: center;">Project Management System</div>
+            <h2>Create Account</h2>
+            <p>Register a new user profile</p>
+            <div id="regError" style="color: var(--rose-red); font-size: 13px; margin-bottom: 10px; text-align: center;"></div>
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="regName" placeholder="e.g. John Doe">
+            </div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="regUsername" placeholder="e.g. johndoe">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="regPassword" placeholder="Set Password">
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select id="regRole">
+                    <option value="developer">Developer</option>
+                    <option value="manager">Project Manager</option>
+                    <option value="client">Client</option>
+                </select>
+            </div>
+            <button class="btn" onclick="register()">Register</button>
+            <div class="auth-toggle">
+                Already have an account? <a onclick="showLogin()">Login Here</a>
+            </div>
+        </div>
+
+        <!-- Dashboard Workspace -->
+        <div id="workspace" class="hidden">
+            <div class="header">
+                <div class="logo">Project Management System</div>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span id="userInfo" style="font-size: 14px; font-weight: 500;"></span>
+                    <button class="btn btn-danger" onclick="logout()">Logout</button>
+                </div>
+            </div>
+
+            <!-- Manager Section -->
+            <div id="managerSection" class="hidden project-card">
+                <h3 style="margin-top: 0;">⚡ Create & Assign New Project</h3>
+                <form id="projectForm">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group">
+                            <label>Project Name</label>
+                            <input type="text" id="projectName" placeholder="e.g. E-Commerce Microservice API" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Assign Registered Developer</label>
+                            <select id="developerSelect" required>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Target Deadline</label>
+                        <input type="date" id="deadline" required>
+                    </div>
+                    <button type="submit" class="btn" style="width: auto; padding: 10px 24px;">Deploy & Assign Project</button>
+                </form>
+            </div>
+
+            <h3 style="margin-top: 25px;">📦 Active Repositories & Projects</h3>
+            <div id="projectsList"></div>
+        </div>
+
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        async function checkSession() {
+            const res = await fetch('/api/current_user');
+            const data = await res.json();
+            if (data.loggedIn) {
+                currentUser = data.user;
+                setupDashboard();
+            } else {
+                showLogin();
+            }
+        }
+
+        function showLogin() {
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('registerSection').classList.add('hidden');
+            document.getElementById('workspace').classList.add('hidden');
+        }
+
+        function showRegister() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('registerSection').classList.remove('hidden');
+            document.getElementById('workspace').classList.add('hidden');
+        }
+
+        async function login() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await res.json();
+            if (res.ok) {
+                currentUser = data.user;
+                setupDashboard();
+            } else {
+                document.getElementById('loginError').innerText = data.error;
+            }
+        }
+
+        async function register() {
+            const name = document.getElementById('regName').value;
+            const username = document.getElementById('regUsername').value;
+            const password = document.getElementById('regPassword').value;
+            const role = document.getElementById('regRole').value;
+
+            const res = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, username, password, role })
+            });
+
+            if (res.ok) {
+                alert('Registration successful! Please login.');
+                showLogin();
+            } else {
+                const data = await res.json();
+                document.getElementById('regError').innerText = data.error;
+            }
+        }
+
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            currentUser = null;
+            showLogin();
+        }
+
+        async function setupDashboard() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('registerSection').classList.add('hidden');
+            document.getElementById('workspace').classList.remove('hidden');
+
+            document.getElementById('userInfo').innerText = `${currentUser.name} (${currentUser.role.toUpperCase()})`;
+
+            if (currentUser.role === 'manager') {
+                document.getElementById('managerSection').classList.remove('hidden');
+                loadDevelopersList();
+            } else {
+                document.getElementById('managerSection').classList.add('hidden');
+            }
+
+            fetchProjects();
+        }
+
+        async function loadDevelopersList() {
+            const res = await fetch('/api/developers');
+            const devs = await res.json();
+            const select = document.getElementById('developerSelect');
+            select.innerHTML = '';
+            
+            if (devs.length === 0) {
+                select.innerHTML = '<option value="">No Developers Registered</option>';
+                return;
+            }
+
+            devs.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.username;
+                opt.innerText = `${d.name} (@${d.username})`;
+                select.appendChild(opt);
+            });
+        }
+
+        async function fetchProjects() {
+            const res = await fetch('/api/projects');
+            const projects = await res.json();
+            const listDiv = document.getElementById('projectsList');
+            listDiv.innerHTML = '';
+
+            const today = new Date().toISOString().split('T')[0];
+
+            if (projects.length === 0) {
+                listDiv.innerHTML = `<div style="background: var(--card-bg); border: 1px solid var(--card-border); padding: 30px; border-radius: 12px; text-align: center; color: var(--text-muted);">No assigned projects found for your account.</div>`;
+                return;
+            }
+
+            projects.forEach(p => {
+                let cardClass = 'status-yellow';
+                let statusBadge = '<span class="badge badge-yellow">🟡 IN_PROGRESS</span>';
+                
+                if (p.status === 'Completed') {
+                    cardClass = 'status-green';
+                    statusBadge = '<span class="badge badge-green">🟢 COMPLETED</span>';
+                } else if (p.deadline < today) {
+                    cardClass = 'status-red';
+                    statusBadge = '<span class="badge badge-red">🔴 OVERDUE</span>';
+                }
+
+                const card = document.createElement('div');
+                card.className = `project-card ${cardClass}`;
+                
+                let devActionHTML = '';
+                if (currentUser.role === 'developer' || currentUser.role === 'manager') {
+                    devActionHTML = `
+                        <div class="subtask-box">
+                            <label>Subtasks & Modules</label>
+                            <ul>
+                                ${p.subtasks.length > 0 ? p.subtasks.map(st => `<li>${st.name}</li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -18px;">No subtasks recorded.</li>'}
+                            </ul>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <input type="text" id="subtask-${p.id}" placeholder="Add new subtask...">
+                                <button class="btn" style="width: auto; padding: 10px 18px;" onclick="addSubtask('${p.id}')">Add Subtask</button>
+                            </div>
+                            
+                            ${p.status !== 'Completed' ? `<button class="btn btn-success" style="margin-top: 14px;" onclick="markComplete('${p.id}')">Mark as Completed</button>` : ''}
+                        </div>
+                    `;
+                } else {
+                    devActionHTML = `
+                        <div class="subtask-box">
+                            <label>Subtasks Progress</label>
+                            <ul>
+                                ${p.subtasks.length > 0 ? p.subtasks.map(st => `<li>${st.name}</li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -18px;">No subtasks recorded.</li>'}
+                            </ul>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <h3 style="margin: 0 0 6px 0; font-size: 18px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">${p.name}</h3>
+                            <p style="margin: 4px 0; color: var(--text-muted); font-size: 14px;"><strong>Assigned Developer:</strong> ${p.developer}</p>
+                            <p style="margin: 4px 0; color: var(--text-muted); font-size: 14px;"><strong>Target Deadline:</strong> ${p.deadline}</p>
+                        </div>
+                        <div>${statusBadge}</div>
+                    </div>
+                    
+                    ${devActionHTML}
+
+                    <div class="comment-box">
+                        <label>Activity Log & Discussion</label>
+                        <ul style="padding-left: 15px;">
+                            ${p.comments.length > 0 ? p.comments.map(c => `<li><strong>${c.author}:</strong>${c.text} <em style="color: var(--text-muted); font-size: 12px;">(${c.time})</em></li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -15px;">No comments posted.</li>'}
+                        </ul>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="comment-${p.id}" placeholder="Type update message...">
+                            <button class="btn" style="width: auto; padding: 10px 18px;" onclick="addComment('${p.id}')">Post Comment</button>
+                        </div>
+                    </div>
+                `;
+                listDiv.appendChild(card);
+            });
+        }
+
+        document.getElementById('projectForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('projectName').value;
+            const developer_username = document.getElementById('developerSelect').value;
+            const deadline = document.getElementById('deadline').value;
+
+            await fetch('/api/projects', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, developer_username, deadline })
+            });
+
+            document.getElementById('projectForm').reset();
+            fetchProjects();
+        });
+
+        async function addSubtask(id) {
+            const subtaskName = document.getElementById(`subtask-${id}`).value;
+            if (!subtaskName) return;
+            await fetch(`/api/projects/${id}/subtasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ subtaskName })
+            });
+            fetchProjects();
+        }
+
+        async function markComplete(id) {
+            await fetch(`/api/projects/${id}/complete`, { method: 'PATCH' });
+            fetchProjects();
+        }
+
+        async function addComment(id) {
+            const text = document.getElementById(`comment-${id}`).value;
+            if (!text) return;
+            await fetch(`/api/projects/${id}/comments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+            fetchProjects();
+        }
+
+        checkSession();
+    </script>
+</body>
+</html>
