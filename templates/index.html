@@ -116,7 +116,6 @@
         }
 
         .status-green { border-left: 5px solid var(--emerald-green); }
-        .status-red { border-left: 5px solid var(--rose-red); }
         .status-yellow { border-left: 5px solid var(--amber-yellow); }
 
         .badge {
@@ -127,7 +126,6 @@
             border-radius: 20px;
         }
         .badge-green { background: rgba(16, 185, 129, 0.15); color: var(--emerald-green); border: 1px solid rgba(16, 185, 129, 0.3); }
-        .badge-red { background: rgba(244, 63, 94, 0.15); color: var(--rose-red); border: 1px solid rgba(244, 63, 94, 0.3); }
         .badge-yellow { background: rgba(245, 158, 11, 0.15); color: var(--amber-yellow); border: 1px solid rgba(245, 158, 11, 0.3); }
 
         .subtask-box, .comment-box {
@@ -212,7 +210,7 @@
                 </div>
             </div>
 
-            <!-- Manager Section -->
+            <!-- Manager Section: Create Project with Multiple Developers -->
             <div id="managerSection" class="hidden project-card">
                 <h3 style="margin-top: 0;">⚡ Create & Assign New Project</h3>
                 <form id="projectForm">
@@ -222,8 +220,8 @@
                             <input type="text" id="projectName" placeholder="e.g. E-Commerce Microservice API" required>
                         </div>
                         <div class="form-group">
-                            <label>Assign Registered Developer</label>
-                            <select id="developerSelect" required>
+                            <label>Assign Developers (Hold Ctrl/Cmd for multiple)</label>
+                            <select id="developerSelect" multiple style="height: 80px;" required>
                             </select>
                         </div>
                     </div>
@@ -243,6 +241,7 @@
 
     <script>
         let currentUser = null;
+        let registeredDevelopers = [];
 
         async function checkSession() {
             const res = await fetch('/api/current_user');
@@ -322,7 +321,7 @@
 
             if (currentUser.role === 'manager') {
                 document.getElementById('managerSection').classList.remove('hidden');
-                loadDevelopersList();
+                await loadDevelopersList();
             } else {
                 document.getElementById('managerSection').classList.add('hidden');
             }
@@ -332,16 +331,16 @@
 
         async function loadDevelopersList() {
             const res = await fetch('/api/developers');
-            const devs = await res.json();
+            registeredDevelopers = await res.json();
             const select = document.getElementById('developerSelect');
             select.innerHTML = '';
             
-            if (devs.length === 0) {
+            if (registeredDevelopers.length === 0) {
                 select.innerHTML = '<option value="">No Developers Registered</option>';
                 return;
             }
 
-            devs.forEach(d => {
+            registeredDevelopers.forEach(d => {
                 const opt = document.createElement('option');
                 opt.value = d.username;
                 opt.innerText = `${d.name} (@${d.username})`;
@@ -355,50 +354,69 @@
             const listDiv = document.getElementById('projectsList');
             listDiv.innerHTML = '';
 
-            const today = new Date().toISOString().split('T')[0];
-
             if (projects.length === 0) {
                 listDiv.innerHTML = `<div style="background: var(--card-bg); border: 1px solid var(--card-border); padding: 30px; border-radius: 12px; text-align: center; color: var(--text-muted);">No assigned projects found for your account.</div>`;
                 return;
             }
 
             projects.forEach(p => {
-                let cardClass = 'status-yellow';
-                let statusBadge = '<span class="badge badge-yellow">🟡 IN_PROGRESS</span>';
-                
-                if (p.status === 'Completed') {
-                    cardClass = 'status-green';
-                    statusBadge = '<span class="badge badge-green">🟢 COMPLETED</span>';
-                } else if (p.deadline < today) {
-                    cardClass = 'status-red';
-                    statusBadge = '<span class="badge badge-red">🔴 OVERDUE</span>';
-                }
+                let cardClass = p.status === 'Completed' ? 'status-green' : 'status-yellow';
+                let statusBadge = p.status === 'Completed' ? '<span class="badge badge-green">🟢 COMPLETED</span>' : '<span class="badge badge-yellow">🟡 IN_PROGRESS</span>';
 
                 const card = document.createElement('div');
                 card.className = `project-card ${cardClass}`;
                 
-                let devActionHTML = '';
-                if (currentUser.role === 'developer' || currentUser.role === 'manager') {
-                    devActionHTML = `
+                // Manager can add subtasks and assign them to developers. Only Manager can complete the project.
+                let actionHTML = '';
+                if (currentUser.role === 'manager' || currentUser.role === 'developer') {
+                    let subtaskInputsHTML = '';
+                    if (currentUser.role === 'manager') {
+                        let devOptions = p.developer_usernames.map(devUsername => {
+                            let devObj = registeredDevelopers.find(d => d.username === devUsername);
+                            let devName = devObj ? devObj.name : devUsername;
+                            return `<option value="${devUsername}">${devName}</option>`;
+                        }).join('');
+
+                        subtaskInputsHTML = `
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <input type="text" id="subtask-name-${p.id}" placeholder="Subtask name..." style="flex: 2;">
+                                <select id="subtask-dev-${p.id}" style="flex: 1;">
+                                    <option value="">Assign Dev</option>
+                                    ${devOptions}
+                                </select>
+                                <button class="btn" style="width: auto; padding: 10px 18px;" onclick="addSubtask('${p.id}')">Add Subtask</button>
+                            </div>
+                        `;
+                    }
+
+                    actionHTML = `
                         <div class="subtask-box">
                             <label>Subtasks & Modules</label>
                             <ul>
-                                ${p.subtasks.length > 0 ? p.subtasks.map(st => `<li>${st.name}</li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -18px;">No subtasks recorded.</li>'}
+                                ${p.subtasks.length > 0 ? p.subtasks.map(st => {
+                                    let assignedDevObj = registeredDevelopers.find(d => d.username === st.assigned_to);
+                                    let assignedName = assignedDevObj ? assignedDevObj.name : st.assigned_to;
+                                    let canComplete = currentUser.role === 'developer' && st.assigned_to === currentUser.username && !st.completed;
+                                    
+                                    return `
+                                        <li style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                            <span>${st.completed ? '✅ <s>' + st.name + '</s>' : '⏳ ' + st.name} <small style="color: var(--text-muted);">(Assigned to: ${assignedName})</small></span>
+                                            ${canComplete ? `<button class="btn btn-success" style="width: auto; padding: 4px 10px; font-size: 12px;" onclick="completeSubtask('${p.id}', '${st.id}')">Mark Complete</button>` : ''}
+                                        </li>
+                                    `;
+                                }).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -18px;">No subtasks recorded.</li>'}
                             </ul>
-                            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                                <input type="text" id="subtask-${p.id}" placeholder="Add new subtask...">
-                                <button class="btn" style="width: auto; padding: 10px 18px;" onclick="addSubtask('${p.id}')">Add Subtask</button>
-                            </div>
+                            ${subtaskInputsHTML}
                             
-                            ${p.status !== 'Completed' ? `<button class="btn btn-success" style="margin-top: 14px;" onclick="markComplete('${p.id}')">Mark as Completed</button>` : ''}
+                            ${currentUser.role === 'manager' && p.status !== 'Completed' ? `<button class="btn btn-success" style="margin-top: 14px;" onclick="markComplete('${p.id}')">Mark Project as Completed</button>` : ''}
                         </div>
                     `;
                 } else {
-                    devActionHTML = `
+                    actionHTML = `
                         <div class="subtask-box">
                             <label>Subtasks Progress</label>
                             <ul>
-                                ${p.subtasks.length > 0 ? p.subtasks.map(st => `<li>${st.name}</li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -18px;">No subtasks recorded.</li>'}
+                                ${p.subtasks.length > 0 ? p.subtasks.map(st => `<li>${st.completed ? '✅ ' : '⏳ '}${st.name}</li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -18px;">No subtasks recorded.</li>'}
                             </ul>
                         </div>
                     `;
@@ -408,18 +426,18 @@
                     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                         <div>
                             <h3 style="margin: 0 0 6px 0; font-size: 18px; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">${p.name}</h3>
-                            <p style="margin: 4px 0; color: var(--text-muted); font-size: 14px;"><strong>Assigned Developer:</strong> ${p.developer}</p>
+                            <p style="margin: 4px 0; color: var(--text-muted); font-size: 14px;"><strong>Assigned Developers:</strong> ${p.developers.join(', ') || 'None'}</p>
                             <p style="margin: 4px 0; color: var(--text-muted); font-size: 14px;"><strong>Target Deadline:</strong> ${p.deadline}</p>
                         </div>
                         <div>${statusBadge}</div>
                     </div>
                     
-                    ${devActionHTML}
+                    ${actionHTML}
 
                     <div class="comment-box">
                         <label>Activity Log & Discussion</label>
                         <ul style="padding-left: 15px;">
-                            ${p.comments.length > 0 ? p.comments.map(c => `<li><strong>${c.author}:</strong>${c.text} <em style="color: var(--text-muted); font-size: 12px;">(${c.time})</em></li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -15px;">No comments posted.</li>'}
+                            ${p.comments.length > 0 ? p.comments.map(c => `<li><strong>${c.author} (${c.role}):</strong> ${c.text} <em style="color: var(--text-muted); font-size: 12px;">(${c.time})</em></li>`).join('') : '<li style="color: var(--text-muted); list-style: none; margin-left: -15px;">No comments posted.</li>'}
                         </ul>
                         <div style="display: flex; gap: 10px;">
                             <input type="text" id="comment-${p.id}" placeholder="Type update message...">
@@ -434,13 +452,14 @@
         document.getElementById('projectForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const name = document.getElementById('projectName').value;
-            const developer_username = document.getElementById('developerSelect').value;
+            const devSelect = document.getElementById('developerSelect');
+            const developer_usernames = Array.from(devSelect.selectedOptions).map(opt => opt.value);
             const deadline = document.getElementById('deadline').value;
 
             await fetch('/api/projects', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, developer_username, deadline })
+                body: JSON.stringify({ name, developer_usernames, deadline })
             });
 
             document.getElementById('projectForm').reset();
@@ -448,13 +467,23 @@
         });
 
         async function addSubtask(id) {
-            const subtaskName = document.getElementById(`subtask-${id}`).value;
-            if (!subtaskName) return;
+            const subtaskName = document.getElementById(`subtask-name-${id}`).value;
+            const assigned_to = document.getElementById(`subtask-dev-${id}`).value;
+            if (!subtaskName || !assigned_to) {
+                alert('Please enter subtask name and assign a developer!');
+                return;
+            }
+
             await fetch(`/api/projects/${id}/subtasks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ subtaskName })
+                body: JSON.stringify({ subtaskName, assigned_to })
             });
+            fetchProjects();
+        }
+
+        async function completeSubtask(projectId, subtaskId) {
+            await fetch(`/api/projects/${projectId}/subtasks/${subtaskId}/complete`, { method: 'PATCH' });
             fetchProjects();
         }
 

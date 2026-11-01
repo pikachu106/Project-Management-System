@@ -4,6 +4,7 @@ import uuid
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_session_management'
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # In-memory storage for Users and Projects
 users = {
@@ -80,8 +81,9 @@ def get_projects():
         return jsonify({"error": "Unauthorized"}), 401
 
     current_user = session['user']
+    # Developer shudhu sei project-gulo dekhbe jate tar username assigned ache
     if current_user['role'] == 'developer':
-        filtered = [p for p in projects if p['developer_username'] == current_user['username']]
+        filtered = [p for p in projects if current_user['username'] in p.get('developer_usernames', [])]
         return jsonify(filtered)
     
     return jsonify(projects)
@@ -92,15 +94,16 @@ def create_project():
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.get_json()
-    dev_username = data.get('developer_username')
-    dev_user = users.get(dev_username)
-    dev_display_name = dev_user['name'] if dev_user else dev_username
+    # Multiple developers support (developer_usernames list)
+    dev_usernames = data.get('developer_usernames', [])
+    
+    dev_display_names = [users.get(u)['name'] for u in dev_usernames if u in users]
 
     new_project = {
         "id": str(uuid.uuid4())[:8],
         "name": data.get('name'),
-        "developer_username": dev_username,
-        "developer": dev_display_name,
+        "developer_usernames": dev_usernames,
+        "developers": dev_display_names,
         "deadline": data.get('deadline'),
         "status": "In Progress",
         "subtasks": [],
@@ -109,28 +112,65 @@ def create_project():
     projects.append(new_project)
     return jsonify(new_project), 201
 
-@app.route('/api/projects/<project_id>/subtasks', methods=['POST'])
-def add_subtask(project_id):
-    if 'user' not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    data = request.get_json()
-    project = next((p for p in projects if p['id'] == project_id), None)
-    if project:
-        project['subtasks'].append({"name": data.get('subtaskName'), "completed": False})
-        return jsonify(project), 200
-    return jsonify({"error": "Project not found"}), 404
-
+# 1. ONLY PROJECT MANAGER CAN COMPLETE PROJECT
 @app.route('/api/projects/<project_id>/complete', methods=['PATCH'])
 def complete_project(project_id):
     if 'user' not in session:
         return jsonify({"error": "Unauthorized"}), 401
+
+    current_user = session['user']
+    if current_user['role'] != 'manager':
+        return jsonify({"error": "Only Project Manager can mark the project as completed!"}), 403
 
     project = next((p for p in projects if p['id'] == project_id), None)
     if project:
         project['status'] = "Completed"
         return jsonify(project), 200
     return jsonify({"error": "Project not found"}), 404
+
+# 2. MANAGER ADDS SUBTASK AND ASSIGNS TO A SPECIFIC DEVELOPER
+@app.route('/api/projects/<project_id>/subtasks', methods=['POST'])
+def add_subtask(project_id):
+    if 'user' not in session or session['user']['role'] != 'manager':
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json()
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if project:
+        subtask_item = {
+            "id": str(uuid.uuid4())[:8],
+            "name": data.get('subtaskName'),
+            "assigned_to": data.get('assigned_to'),  # Developer username
+            "completed": False
+        }
+        project['subtasks'].append(subtask_item)
+        return jsonify(project), 200
+    return jsonify({"error": "Project not found"}), 404
+
+# 3. ONLY THE ASSIGNED DEVELOPER CAN COMPLETE THEIR SUBTASK
+@app.route('/api/projects/<project_id>/subtasks/<subtask_id>/complete', methods=['PATCH'])
+def complete_subtask(project_id, subtask_id):
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    current_user = session['user']
+    if current_user['role'] != 'developer':
+        return jsonify({"error": "Only developers can complete subtasks!"}), 403
+
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({"error": "Project not found"}), 404
+
+    subtask = next((s for s in project['subtasks'] if s['id'] == subtask_id), None)
+    if not subtask:
+        return jsonify({"error": "Subtask not found"}), 404
+
+    # Check if the logged-in developer is the one assigned to this subtask
+    if subtask['assigned_to'] != current_user['username']:
+        return jsonify({"error": "You are not assigned to this subtask!"}), 403
+
+    subtask['completed'] = True
+    return jsonify(project), 200
 
 @app.route('/api/projects/<project_id>/comments', methods=['POST'])
 def add_comment(project_id):
@@ -143,6 +183,7 @@ def add_comment(project_id):
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         project['comments'].append({
             "author": session['user']['name'],
+            "role": session['user']['role'],
             "text": data.get('text'),
             "time": now
         })
