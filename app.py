@@ -6,11 +6,10 @@ app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_session_management'
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 
-# In-memory storage for Users and Projects
 users = {
     "manager1": {"username": "manager1", "password": "123", "role": "manager", "name": "Project Manager 1"},
-    "alex": {"username": "alex", "password": "123", "role": "developer", "name": "Alex (Dev)"},
-    "rahim": {"username": "rahim", "password": "123", "role": "developer", "name": "Rahim (Dev)"},
+    "alex": {"username": "sunshine", "password": "123", "role": "developer", "name": "sunshine (Dev)"},
+    "rahim": {"username": "sundaz", "password": "123", "role": "developer", "name": "sundaz (Dev)"},
     "client1": {"username": "client1", "password": "123", "role": "client", "name": "Client 1"}
 }
 
@@ -64,6 +63,30 @@ def logout():
     session.pop('user', None)
     return jsonify({"message": "Logged out"}), 200
 
+@app.route('/api/users/delete', methods=['DELETE'])
+def delete_account():
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    username = session['user']['username']
+    
+    for p in projects:
+        if username in p.get('developer_usernames', []):
+            p['developer_usernames'].remove(username)
+        if username in p.get('developers', []):
+            dev_display = users[username]['name'] if username in users else username
+            if dev_display in p['developers']:
+                p['developers'].remove(dev_display)
+        for st in p.get('subtasks', []):
+            if st.get('assigned_to') == username:
+                st['assigned_to'] = "Unassigned"
+
+    if username in users:
+        del users[username]
+        
+    session.pop('user', None)
+    return jsonify({"message": "Account deleted successfully"}), 200
+
 @app.route('/api/current_user', methods=['GET'])
 def get_current_user():
     if 'user' in session:
@@ -81,7 +104,12 @@ def get_projects():
         return jsonify({"error": "Unauthorized"}), 401
 
     current_user = session['user']
-    # Developer shudhu sei project-gulo dekhbe jate tar username assigned ache
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    for p in projects:
+        if p['status'] != 'Completed' and p['deadline'] < today:
+            p['status'] = 'Overdue'
+
     if current_user['role'] == 'developer':
         filtered = [p for p in projects if current_user['username'] in p.get('developer_usernames', [])]
         return jsonify(filtered)
@@ -94,9 +122,7 @@ def create_project():
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.get_json()
-    # Multiple developers support (developer_usernames list)
     dev_usernames = data.get('developer_usernames', [])
-    
     dev_display_names = [users.get(u)['name'] for u in dev_usernames if u in users]
 
     new_project = {
@@ -112,42 +138,70 @@ def create_project():
     projects.append(new_project)
     return jsonify(new_project), 201
 
-# 1. ONLY PROJECT MANAGER CAN COMPLETE PROJECT
 @app.route('/api/projects/<project_id>/complete', methods=['PATCH'])
 def complete_project(project_id):
-    if 'user' not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    current_user = session['user']
-    if current_user['role'] != 'manager':
+    if 'user' not in session or session['user']['role'] != 'manager':
         return jsonify({"error": "Only Project Manager can mark the project as completed!"}), 403
 
     project = next((p for p in projects if p['id'] == project_id), None)
     if project:
+        all_done = all(st['completed'] for st in project['subtasks']) if project['subtasks'] else False
+        if not all_done and len(project['subtasks']) > 0:
+            return jsonify({"error": "All subtasks must be completed by developers before marking project complete!"}), 400
+        
         project['status'] = "Completed"
         return jsonify(project), 200
     return jsonify({"error": "Project not found"}), 404
 
-# 2. MANAGER ADDS SUBTASK AND ASSIGNS TO A SPECIFIC DEVELOPER
 @app.route('/api/projects/<project_id>/subtasks', methods=['POST'])
 def add_subtask(project_id):
-    if 'user' not in session or session['user']['role'] != 'manager':
-        return jsonify({"error": "Unauthorized"}), 403
+    if 'user' not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    current_user = session['user']
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({"error": "Project not found"}), 404
+
+    if current_user['role'] == 'developer' and current_user['username'] not in project.get('developer_usernames', []):
+        return jsonify({"error": "You are not assigned to this project!"}), 403
 
     data = request.get_json()
-    project = next((p for p in projects if p['id'] == project_id), None)
-    if project:
-        subtask_item = {
-            "id": str(uuid.uuid4())[:8],
-            "name": data.get('subtaskName'),
-            "assigned_to": data.get('assigned_to'),  # Developer username
-            "completed": False
-        }
-        project['subtasks'].append(subtask_item)
-        return jsonify(project), 200
-    return jsonify({"error": "Project not found"}), 404
+    assigned_to = data.get('assigned_to')
+    if current_user['role'] == 'developer':
+        assigned_to = current_user['username']
 
-# 3. ONLY THE ASSIGNED DEVELOPER CAN COMPLETE THEIR SUBTASK
+    subtask_item = {
+        "id": str(uuid.uuid4())[:8],
+        "name": data.get('subtaskName'),
+        "assigned_to": assigned_to,
+        "completed": False,
+        "creator_role": current_user['role']  # Tracking who created it ('manager' or 'developer')
+    }
+    project['subtasks'].append(subtask_item)
+    return jsonify(project), 200
+
+@app.route('/api/projects/<project_id>/subtasks/<subtask_id>/reassign', methods=['PATCH'])
+def reassign_subtask(project_id, subtask_id):
+    if 'user' not in session or session['user']['role'] != 'manager':
+        return jsonify({"error": "Only managers can reassign subtasks!"}), 403
+
+    project = next((p for p in projects if p['id'] == project_id), None)
+    if not project:
+        return jsonify({"error": "Project not found"}), 404
+
+    subtask = next((s for s in project['subtasks'] if s['id'] == subtask_id), None)
+    if not subtask:
+        return jsonify({"error": "Subtask not found"}), 404
+
+    # Prevent manager from reassigning subtasks created by developers
+    if subtask.get('creator_role') == 'developer':
+        return jsonify({"error": "Manager cannot change developer for subtasks created by developers!"}), 403
+
+    data = request.get_json()
+    subtask['assigned_to'] = data.get('assigned_to')
+    return jsonify(project), 200
+
 @app.route('/api/projects/<project_id>/subtasks/<subtask_id>/complete', methods=['PATCH'])
 def complete_subtask(project_id, subtask_id):
     if 'user' not in session:
@@ -165,7 +219,6 @@ def complete_subtask(project_id, subtask_id):
     if not subtask:
         return jsonify({"error": "Subtask not found"}), 404
 
-    # Check if the logged-in developer is the one assigned to this subtask
     if subtask['assigned_to'] != current_user['username']:
         return jsonify({"error": "You are not assigned to this subtask!"}), 403
 
